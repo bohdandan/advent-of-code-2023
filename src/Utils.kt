@@ -26,3 +26,13 @@ fun <R> Any?.assert(expected: R): R {
     }
     return this as R
 }
+fun Long.gcd(other: Long): Long {
+    fun gcd(a: Long, b: Long): Long {
+        return if (b == 0L) a else gcd(b, a % b)
+    }
+    return gcd(this, other)
+}
+
+fun Long.lcm(other: Long): Long {
+    return if (this == 0L || other == 0L) 0 else Math.abs(this * other) / this.gcd(other)
+}
