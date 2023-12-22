@@ -18,3 +18,4 @@ typealias Position = Pair<Int, Int>
 operator fun Position.plus(other: Position) = first + other.first to second + other.second
 operator fun Position.minus(other: Position) = first - other.first to second - other.second
 operator fun Position.times(amount: Int) = first * amount to second * amount
+fun Position.cardinals() = Direction.entries.map { it.position + this }
