@@ -3,112 +3,90 @@ package day22
 import assert
 import println
 import readInput
-import kotlin.math.min
+import java.util.*
 
-typealias Point = Triple<Int, Int, Int>
-operator fun Point.plus(other: Point) = Point(first + other.first, second + other.second, third + other.third)
+data class Brick(val index: Int, var x: IntRange, var y: IntRange, var z: IntRange) {
+    val top by lazy { copy(z = z.last..z.last) }
+    val bottom by lazy { copy(z = z.first..z.first) }
+    val holding = mutableListOf<Brick>()
+    val standingOn = mutableListOf<Brick>()
+    fun intersects(brick: Brick) =
+        x.intersect(brick.x).isNotEmpty() &&
+            y.intersect(brick.y).isNotEmpty() &&
+            z.intersect(brick.z).isNotEmpty()
 
-val DOWN = Point(0,0,-1)
-data class Brick(val index: Int, var point1: Point, var point2: Point) {
-    var occupiedBricks: List<Point> = calculateOccupiedBricks()
-
-    private fun calculateOccupiedBricks(): List<Point> {
-        return (point1.first..point2.first).map { x ->
-            (point1.second..point2.second).map { y ->
-                (point1.third..point2.third).map { z ->
-                    Triple(x, y, z)
-                }
-            }.flatten()
-        }.flatten()
-    }
-
-    fun copy() = Brick(index, point1.copy(), point2.copy())
-    fun move(vector: Point) {
-        point1 += vector
-        point2 += vector
-        occupiedBricks = calculateOccupiedBricks()
-    }
+    fun moveDown(steps: Int = 1): Brick = copy(z = (z.first - steps)..(z.last - steps))
 }
 
 class SandSlabs(input: List<String>) {
-    val bricks = input.mapIndexed{ index, row ->
+    private var bricks = input.mapIndexed{ index, row ->
         val (point1, point2) = row.split("~")
         val (x1, y1, z1) = point1.split(",").map{it.toInt()}
         val (x2, y2, z2) = point2.split(",").map{it.toInt()}
 
-        Brick(index, Point(x1,y1, z1), Point(x2,y2, z2))
-    }
+        Brick(index, x1..x2,y1..y2, z1..z2)
+    }.sortedWith(compareBy { it.z.first })
 
-    fun moveDown(bricks: List<Brick>): Int {
-        val sortedBricks = bricks.sortedBy { min(it.point1.third, it.point2.third) }
-        var moves = 0
+    init {
+        fun settle(settledBricks: MutableList<Brick>, brick: Brick): MutableList<Brick> {
+            var holdingBricks = listOf<Brick>()
+            var bottom = brick.bottom
 
-        for (brick in sortedBricks) {
-            val lowerLevel = brick.occupiedBricks.map { it + DOWN }
-            if (lowerLevel.any{it.third < 1}) continue
-            if (!bricks.filter { it != brick}.map { it.occupiedBricks }.flatten().any{lowerLevel.contains(it)}) {
-                brick.move(DOWN)
-                moves++
+            while (bottom.z.first != 0 && holdingBricks.isEmpty()) {
+                bottom = bottom.moveDown()
+                holdingBricks = settledBricks.filter { it.top.intersects(bottom) }
             }
-        }
+            val settledBrick = brick.moveDown(brick.z.first - bottom.z.first - 1)
 
-        return moves
-    }
-
-    fun init() {
-        var moves = 1
-        var iteration = 0
-        while (moves > 0) {
-            moves = moveDown(bricks)
-            iteration++
-            "$iteration -> $moves moves".println()
-        }
-    }
-
-    fun calculateRemovable(): Int {
-        init()
-        var result = 0
-        bricks.indices.forEach { it ->
-            val tmpBricks = bricks.map(Brick::copy).toMutableList()
-            tmpBricks.removeAt(it)
-            val moves = moveDown(tmpBricks)
-            if (moves == 0) {
-                result++
-                "Brick ${bricks[it].index} is safely removable".println()
+            holdingBricks.forEach {
+                it.holding += settledBrick
+                settledBrick.standingOn += it
             }
+
+            settledBricks += settledBrick
+            return settledBricks
         }
 
-        return result
+        bricks = bricks.fold(mutableListOf(), ::settle).sortedWith(compareBy { it.z.first })
+    }
+
+    fun calculateSafelyRemovable(): Int {
+        return bricks.count { brick -> brick.holding.isEmpty() || brick.holding.all { it.standingOn.size > 1 } }
     }
 
     fun calculateMaxNumberOfFall(): Int {
-        init()
-        var result = 0
-        bricks.indices.forEach { it ->
-            val tmpBricks = bricks.map(Brick::copy).toMutableList()
-            tmpBricks.removeAt(it)
-            val moves = moveDown(tmpBricks)
-            if (moves > 0) {
-                result += moves
-                "Brick ${bricks[it].index} is not removable: $moves".println()
+        fun countMovedBricksIfDisintegrated(brick: Brick): Int {
+            val movedBricks = mutableSetOf(brick.index)
+            val queue: Queue<Brick> = LinkedList()
+            brick.holding.forEach(queue::offer)
+            while (queue.isNotEmpty()) {
+                val brickToCheck = queue.poll()
+                if (brickToCheck.standingOn.all { movedBricks.contains(it.index) }) {
+                    movedBricks.add(brickToCheck.index)
+                    brickToCheck.holding.forEach(queue::offer)
+                }
             }
+            movedBricks.remove(brick.index)
+            return movedBricks.size
         }
-
-        return result
+        
+        return bricks.map(::countMovedBricksIfDisintegrated).sum()
     }
 }
 fun main() {
     SandSlabs(readInput("day22/test1"))
-        .calculateRemovable()
+        .calculateSafelyRemovable()
         .assert(5)
-        .println()
 
     "Part 1:".println()
+    SandSlabs(readInput("day22/input"))
+        .calculateSafelyRemovable()
+        .assert(501)
+        .println()
+
     SandSlabs(readInput("day22/test1"))
         .calculateMaxNumberOfFall()
         .assert(7)
-        .println()
-
 
     "Part 2:".println()
     SandSlabs(readInput("day22/input"))
